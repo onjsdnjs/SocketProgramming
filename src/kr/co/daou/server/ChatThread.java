@@ -140,10 +140,9 @@ class ChatThread extends Thread {
 			outMsg = clientSocket.getOutputStream();
 
 			boolean authentication = true;
+			clientSocket.setSoTimeout(timeout);
+			new PingPong(10000, outMsg).start();
 			while (status) {
-
-				clientSocket.setSoTimeout(timeout);
-				new PingPong(10000, outMsg).start();
 
 				// 수신된 메시지를 DATASIZE 길이
 				receiveDataSize = inMsg.read(messageBuffer);

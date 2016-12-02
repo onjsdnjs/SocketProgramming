@@ -17,7 +17,7 @@ public class PingPong extends Thread {
 		while (true) {
 			try {
 				Thread.sleep(delayTime);
-				byte[] b = new byte[12288];
+				byte[] b = new byte[12];
 				String str = "message/ping";
 				b = str.getBytes();
 				outMsg.write(b, 0, b.length);

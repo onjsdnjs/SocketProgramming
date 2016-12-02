@@ -289,9 +289,6 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 		if (msg.equals("ping")) {
 			String str = this.id + "/pong";
 			byte[] b = str.getBytes();
-			System.out.println("----------------");
-			System.out.println(str);
-			System.out.println("----------------");
 			try {
 				outMsg.write(b, 0, b.length);
 			} catch (IOException e) {
