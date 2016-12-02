@@ -5,10 +5,6 @@ import java.awt.CardLayout;
 import java.awt.Container;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -28,6 +24,7 @@ import kr.co.daou.utils.Utils;
 public class MultiThreadChatClient implements ActionListener, Runnable {
 	private String ip;
 	private String id;
+
 	private Socket socket;
 	private InputStream inMsg = null;
 	private OutputStream outMsg = null;
