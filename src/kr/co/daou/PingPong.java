@@ -1,28 +1,30 @@
 package kr.co.daou;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.net.Socket;
+import java.io.OutputStream;
 
 public class PingPong extends Thread {
 	private int delayTime;
-	private PrintWriter outMsg;
+	private OutputStream outMsg;
 
 	// constructor:
-	public PingPong(int delayTime, PrintWriter outMsg) {
+	public PingPong(int delayTime, OutputStream outMsg) {
 		this.delayTime = delayTime;
 		this.outMsg = outMsg;
 	}
 
 	public void run() {
-		try {
-			while (true) {
+		while (true) {
+			try {
 				Thread.sleep(delayTime);
-				outMsg.println("message/ping");
+				byte[] b = new byte[12288];
+				String str = "message/ping";
+				b = str.getBytes();
+				outMsg.write(b, 0, b.length);
+				outMsg.flush();
+			} catch (IOException | InterruptedException e) {
+				e.printStackTrace();
 			}
-		} catch (InterruptedException e) {
-			e.printStackTrace();
 		}
 	}
 }

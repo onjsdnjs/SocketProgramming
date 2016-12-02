@@ -1,4 +1,4 @@
-package kr.co.daou;
+package kr.co.daou.client;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -10,8 +10,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 
 import javax.swing.JButton;
@@ -22,15 +22,21 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
+import kr.co.daou.PingPong;
+import kr.co.daou.utils.Utils;
+
 public class MultiThreadChatClient implements ActionListener, Runnable {
 	private String ip;
 	private String id;
 	private Socket socket;
-	private BufferedReader inMsg = null;
-	private PrintWriter outMsg = null;
+	private InputStream inMsg = null;
+	private OutputStream outMsg = null;
 	private int timeout = 12000;
-	private File file = new File("C:/Users/user/Desktop/txtFile.txt");
-	private int dataSize;
+
+	// 수신 메시지 담아두는 20byte 변수 선언
+	private byte[] messageBuffer = new byte[20480];
+	private int receiveDataSize;
+	private byte[] receiveData = null;
 
 	// 로그인 패널
 	private JPanel loginPanel;
@@ -178,18 +184,25 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 		}
 	}
 
+	// 로그인 버튼 클릭시
 	private void connectServer() {
 		try {
 			// 소켓 생성
 			socket = new Socket(ip, 9999);
-			System.out.println("[Client]Server 연결 성공");
+			System.out.println("[" + id + "]Server 연결 성공");
 
 			// 입출력 스트림 생성
-			this.inMsg = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
-			this.outMsg = new PrintWriter(socket.getOutputStream(), true);
+			this.inMsg = socket.getInputStream();
+			this.outMsg = socket.getOutputStream();
+
+			// String message = this.id + "/login";
+
+			// 인증을 위한 JSON 메세지 생성
+			byte[] bytes = Utils.makeJSONMessageForAuth(id, id).getBytes();
 
 			// 서버에 로그인 메시지 전달
-			this.outMsg.println(this.id + "/login");
+			this.outMsg.write(bytes);
+			this.outMsg.flush();
 
 			// 메시지 수신을 위한 스레드 생성
 			thread = new Thread(this);
@@ -201,41 +214,45 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 
 	private void sendMsg(String msg) {
 
-		// 파일을 읽어서 출력
-		if (file.exists()) {
-			BufferedReader reader = null;
-			String line = "";
-			String m = null;
-			try {
-				reader = new BufferedReader(new FileReader(file));
-				while ((m = reader.readLine()) != null) {
-					line += m;
-				}
-				outMsg.println(id + "/" + line);
-			} catch (FileNotFoundException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+		String message = id + "/" + msg;
+		byte[] bytes = message.getBytes();
+		try {
+			this.outMsg.write(bytes);
+			this.outMsg.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
-		// 메시지 전송
-		// outMsg.println(id + "/" + msg);
 		// 입력창 클리어
 		msgInput.setText("");
 	}
 
 	private void whisper(String msg) {
-		// 메시지 전송
+
 		String[] temp = msg.split("/");
-		outMsg.println(id + "/whisper" + "/" + temp[0] + "/" + temp[1]);
-		// 입력창 클리어
+		String message = id + "/whisper" + "/" + temp[0] + "/" + temp[1];
+		byte[] bytes = message.getBytes();
+		// 서버에 로그인 메시지 전달
+		try {
+			this.outMsg.write(bytes);
+			this.outMsg.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 		msgInput.setText("");
 	}
 
 	private void block(String msg) {
-		// 메시지 전송
+
 		String[] temp = msg.split("/");
-		outMsg.println(id + "/block" + "/" + temp[0] + "/" + temp[1]);
+		String message = id + "/block" + "/" + temp[0] + "/" + temp[1];
+		byte[] bytes = message.getBytes();
+
+		try {
+			this.outMsg.write(bytes);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
 		// 입력창 클리어
 		msgInput.setText("");
 	}
@@ -246,8 +263,17 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 
 	private void logout() {
 		// 로그아웃 메시지 전송
-		outMsg.println(id + "/logout");
-		outMsg.close();
+		String message = id + "/logout";
+		byte[] bytes = message.getBytes();
+
+		try {
+			this.outMsg.write(bytes);
+			this.outMsg.flush();
+			outMsg.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
 		try {
 			inMsg.close();
 			socket.close();
@@ -258,16 +284,23 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 	}
 
 	private void onReceiveMsg(String id, String msg) {
+
 		// From서버, ping 받음
 		if (msg.equals("ping")) {
-			outMsg.println(this.id + "/pong");
+			String str = this.id + "/pong";
+			byte[] b = str.getBytes();
+			System.out.println("----------------");
+			System.out.println(str);
+			System.out.println("----------------");
+			try {
+				outMsg.write(b, 0, b.length);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 		// From서버, pong 받음
 		else if (msg.equals("pong")) {
 			System.out.println(id + "/pong");
-		} else if (msg.equals("dataSize")) {
-			// 파일의 크기 전송
-			outMsg.println(file.length());
 		} else {
 			// JTextArea에 수신된 메시지 추가
 			msgOut.append(id + ">" + msg + "\n");
@@ -279,7 +312,6 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 		// 수신 메시지를 처리하는 변수
 		String msg;
 		String[] rmsg;
-
 		status = true;
 
 		try {
@@ -288,9 +320,20 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 			new PingPong(10000, outMsg).start();
 
 			while (status) {
-				// 메시지 수신과 파싱
-				msg = inMsg.readLine();
+				// 수신된 메시지를 DATASIZE 길이
+				receiveDataSize = inMsg.read(messageBuffer);
+
+				if (receiveDataSize != 0) {
+					receiveData = new byte[receiveDataSize];
+					// src, srcPos, dest, destPos, length
+					System.arraycopy(messageBuffer, 0, receiveData, 0, receiveDataSize);
+				}
+
+				// byte[] offset, length
+				msg = new String(receiveData, 0, receiveData.length);
+				// '/' 구분자를 기준으로 메시지를 문자열 배열로 파싱
 				rmsg = msg.split("/");
+
 				this.onReceiveMsg(rmsg[0], rmsg[1]);
 			}
 		} catch (IOException e) {
