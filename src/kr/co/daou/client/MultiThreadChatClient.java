@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketException;
 
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -18,7 +19,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
-import kr.co.daou.PingPong;
+import kr.co.daou.format.Const;
 import kr.co.daou.utils.Utils;
 
 public class MultiThreadChatClient implements ActionListener, Runnable {
@@ -28,10 +29,10 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 	private Socket socket;
 	private InputStream inMsg = null;
 	private OutputStream outMsg = null;
-	private int timeout = 12000;
+	private int timeout = 6000;
 
-	// 수신 메시지 담아두는 20byte 변수 선언
-	private byte[] messageBuffer = new byte[20480];
+	// 수신 메시지 담아두는 변수 선언
+	private byte[] messageBuffer = new byte[100];
 	private int receiveDataSize;
 	private byte[] receiveData = null;
 
@@ -73,7 +74,9 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 	private Thread thread;
 	// 상태 플래그
 	boolean status;
+	boolean logoutFlag;
 
+	// Java SWING 코드
 	public MultiThreadChatClient(String ip) {
 		this.ip = ip;
 
@@ -182,35 +185,31 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 	}
 
 	// 로그인 버튼 클릭시
-	private void connectServer() {
+	private boolean connectServer() {
 		try {
 			// 소켓 생성
 			socket = new Socket(ip, 9999);
 			System.out.println("[" + id + "]Server 연결 성공");
-
 			// 입출력 스트림 생성
 			this.inMsg = socket.getInputStream();
 			this.outMsg = socket.getOutputStream();
-
 			// String message = this.id + "/login";
-
 			// 인증을 위한 JSON 메세지 생성
-			byte[] bytes = Utils.makeJSONMessageForAuth(id, id).getBytes();
-
+			byte[] bytes = Utils.makeMessageStringToByte(Utils.makeJSONMessageForAuth(id, id));
 			// 서버에 로그인 메시지 전달
-			this.outMsg.write(bytes);
+			this.outMsg.write(Utils.mergeBytearrays(Utils.intTobyte(bytes.length), bytes));
 			this.outMsg.flush();
-
 			// 메시지 수신을 위한 스레드 생성
 			thread = new Thread(this);
 			thread.start();
+			return true;
 		} catch (Exception e) {
 			System.out.println("[MultiChatClient]connectServer() Exception 발생!!");
+			return false;
 		}
 	}
 
 	private void sendMsg(String msg) {
-
 		String message = id + "/" + msg;
 		byte[] bytes = message.getBytes();
 		try {
@@ -224,7 +223,6 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 	}
 
 	private void whisper(String msg) {
-
 		String[] temp = msg.split("/");
 		String message = id + "/whisper" + "/" + temp[0] + "/" + temp[1];
 		byte[] bytes = message.getBytes();
@@ -259,6 +257,7 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 	}
 
 	private void logout() {
+		logoutFlag = true;
 		// 로그아웃 메시지 전송
 		String message = id + "/logout";
 		byte[] bytes = message.getBytes();
@@ -281,20 +280,18 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 	}
 
 	private void onReceiveMsg(String id, String msg) {
-
 		// From서버, ping 받음
 		if (msg.equals("ping")) {
-			String str = this.id + "/pong";
-			byte[] b = str.getBytes();
 			try {
-				outMsg.write(b, 0, b.length);
+				// 인증을 위한 JSON 메세지 생성
+				byte[] bytes = Utils.makeMessageStringToByte(Utils.makeJSONMessageForPingPong(false));
+				// 서버에 로그인 메시지 전달
+				this.outMsg.write(Utils.mergeBytearrays(Utils.intTobyte(bytes.length), bytes));
+				this.outMsg.flush();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-		}
-		// From서버, pong 받음
-		else if (msg.equals("pong")) {
-			System.out.println(id + "/pong");
+			System.out.println("Pong 전송");
 		} else {
 			// JTextArea에 수신된 메시지 추가
 			msgOut.append(id + ">" + msg + "\n");
@@ -308,15 +305,13 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 		String[] rmsg;
 		status = true;
 
-		try {
-			socket.setSoTimeout(timeout);
-			// 클라이언트에게 timeout 설정
-			new PingPong(10000, outMsg).start();
-
-			while (status) {
+		while (status) {
+			try {
+				// timeout 설정
+				socket.setSoTimeout(timeout);
 				// 수신된 메시지를 DATASIZE 길이
 				receiveDataSize = inMsg.read(messageBuffer);
-
+				// 서버로 부터 온 데이터 format
 				if (receiveDataSize != 0) {
 					receiveData = new byte[receiveDataSize];
 					// src, srcPos, dest, destPos, length
@@ -326,17 +321,71 @@ public class MultiThreadChatClient implements ActionListener, Runnable {
 				// byte[] offset, length
 				msg = new String(receiveData, 0, receiveData.length);
 				// '/' 구분자를 기준으로 메시지를 문자열 배열로 파싱
+				// msg = Utils.parseJSONMessage(msg);
 				rmsg = msg.split("/");
-
 				this.onReceiveMsg(rmsg[0], rmsg[1]);
+
+			} catch (IOException e) {
+				// 서버가 죽은 경우
+				if (logoutFlag == false) {
+					try {
+						// Ping 메시지 전송
+						System.out.println("Time out 발생...");
+						byte[] bytes = Utils.makeMessageStringToByte(Utils.makeJSONMessageForPingPong(true));
+						this.outMsg.write(Utils.mergeBytearrays(Utils.intTobyte(bytes.length), bytes));
+						this.outMsg.flush();
+						System.out.println("ping 전송");
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+
+					try {
+						Thread.sleep(5000);
+					} catch (InterruptedException e1) {
+						e1.printStackTrace();
+					}
+					// 수신된 메시지를 DATASIZE 길이
+					try {
+						receiveDataSize = inMsg.read(messageBuffer);
+						// 서버로 부터 온 데이터 format
+						if (receiveDataSize != 0) {
+							receiveData = new byte[receiveDataSize];
+							// src, srcPos, dest, destPos, length
+							System.arraycopy(messageBuffer, 0, receiveData, 0, receiveDataSize);
+						}
+						// byte[] offset, length
+						msg = new String(receiveData, 0, receiveData.length);
+
+						// '/' 구분자를 기준으로 메시지를 문자열 배열로 파싱
+						// msg = Utils.parseJSONMessage(msg);
+						rmsg = msg.split("/");
+
+						// From서버, pong 받음
+						if (rmsg[1].equals("pong")) {
+							System.out.println(rmsg[0] + "/pong");
+						}
+					} catch (IOException e1) {
+						// 서버가 죽은 경우
+						if (logoutFlag == false) {
+							boolean flag = true;
+							while (flag) {
+								if (connectServer())
+									flag = false;
+							}
+						}
+					}
+				}
+
+				if (logoutFlag == true) {
+					// 클라이언트가 죽은 경우
+					System.out.println("[MultiChatClient]" + thread.getName() + "종료됨!");
+					status = false;
+				}
 			}
-		} catch (IOException e) {
-			status = false;
-		}
-		System.out.println("[MultiChatClient]" + thread.getName() + "종료됨");
+		} // end of while
 	}
 
 	public static void main(String[] args) {
-		MultiThreadChatClient mcc = new MultiThreadChatClient("127.0.0.1");
+		MultiThreadChatClient mcc = new MultiThreadChatClient(Const.SERVER_IP);
 	}
 }

@@ -23,10 +23,10 @@ public interface Const {
 	 * DB Connection
 	 */
 	String CLASS_FOR_NAME = "com.mysql.jdbc.Driver";
-	String JDBC_URL = "jdbc:mysql://127.0.0.1:3306/";
-	String DB_NAME = "test";
-	String DB_USER_ID = "test";
-	String DB_USER_PASSWORD = "1234";
+	String JDBC_URL = "jdbc:mysql://localhost/";
+	String DB_NAME = "daoudb";
+	String DB_USER_ID = "daou";
+	String DB_USER_PASSWORD = "daou";
 
 	/**
 	 * JSON

@@ -3,12 +3,15 @@ package kr.co.daou;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import kr.co.daou.utils.Utils;
+
 public class PingPong extends Thread {
+	private String obj;
 	private int delayTime;
 	private OutputStream outMsg;
 
 	// constructor:
-	public PingPong(int delayTime, OutputStream outMsg) {
+	public PingPong(String obj, int delayTime, OutputStream outMsg) {
 		this.delayTime = delayTime;
 		this.outMsg = outMsg;
 	}
@@ -17,10 +20,8 @@ public class PingPong extends Thread {
 		while (true) {
 			try {
 				Thread.sleep(delayTime);
-				byte[] b = new byte[12];
-				String str = "message/ping";
-				b = str.getBytes();
-				outMsg.write(b, 0, b.length);
+				outMsg.write(Utils.makeJSONMessageForPingPong(true).getBytes());
+
 				outMsg.flush();
 			} catch (IOException | InterruptedException e) {
 				e.printStackTrace();

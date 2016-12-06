@@ -7,8 +7,6 @@ import java.net.Socket;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-
-import kr.co.daou.PingPong;
 import kr.co.daou.db.DBHelper;
 import kr.co.daou.utils.Utils;
 
@@ -17,11 +15,6 @@ class ChatThread extends Thread {
 	private Socket clientSocket = null;
 	// 전체 클라이언트 스레드
 	private ArrayList<ChatThread> chatlist = null;
-
-	// 수신 메시지 담아두는 20byte 변수 선언
-	private byte[] messageBuffer = new byte[20480];
-	private int receiveDataSize;
-	private byte[] receiveData;
 
 	// 수신 메시지와 파싱된 메시지 담아두는 변수 선언
 	private String msg;
@@ -38,9 +31,9 @@ class ChatThread extends Thread {
 	}
 
 	// 연결된 모든 클라이언트에 메시지 전송
-	void msgSendAll(String msg) {
+	public void msgSendAll(String msg) {
 		for (ChatThread ct : chatlist) {
-			byte[] b = new byte[20480];
+			byte[] b = new byte[msg.length()];
 			b = msg.getBytes();
 			try {
 				ct.outMsg.write(b, 0, b.length);
@@ -52,7 +45,7 @@ class ChatThread extends Thread {
 	}
 
 	// 특정 클라이언트에 메시지 전송
-	void whisperSend(String msg) {
+	public void whisperSend(String msg) {
 		String[] temp = msg.split("/");
 		for (ChatThread ct : chatlist) {
 			// 해당 클라이언트 socket 찾는 과정
@@ -72,7 +65,7 @@ class ChatThread extends Thread {
 	}
 
 	// 특정 클라이언트 제외하고 메시지 전송
-	void blockSend(String msg) {
+	public void blockSend(String msg) {
 		String[] temp = msg.split("/");
 		for (ChatThread ct : chatlist) {
 			// 해당 클라이언트 socket을 제외한 클라이언트 찾는 과정
@@ -92,7 +85,7 @@ class ChatThread extends Thread {
 	}
 
 	// 허가되지 않은 클라이언트에게 메시지 전송
-	void alert(String msg) {
+	public void alert(String msg) {
 		for (ChatThread ct : chatlist) {
 			// 해당 클라이언트 socket 찾는 과정
 			if (ct.rmsg[0].equals(msg)) {
@@ -133,33 +126,29 @@ class ChatThread extends Thread {
 	public void run() {
 		boolean status = true;
 		System.out.println("##ClientThread START...");
+		// 입출력 스트림 생성
 		try {
-			// 입출력 스트림 생성
 			inMsg = clientSocket.getInputStream();
 			outMsg = clientSocket.getOutputStream();
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
 
-			boolean authentication = true;
-			clientSocket.setSoTimeout(timeout);
-			new PingPong(10000, outMsg).start();
-			while (status) {
+		while (status) {
+			try {
+				// timeout 설정
+				clientSocket.setSoTimeout(timeout);
 
-				// 수신된 메시지를 DATASIZE 길이
-				receiveDataSize = inMsg.read(messageBuffer);
+				// 수신된 메시지 DATASIZE
+				byte[] header = new byte[4];
+				int headlength = inMsg.read(header);
+				int length = Utils.byteToInt(header);
 
-				if (receiveDataSize != 0) {
-					receiveData = new byte[receiveDataSize];
-					// src, srcPos, dest, destPos, length
-					System.arraycopy(messageBuffer, 0, receiveData, 0, receiveDataSize);
-				}
-
-				// byte[], offset, length
-				msg = new String(receiveData, 0, receiveData.length);
-
-				// 처음 인증 과정
-				if (authentication) {
-					msg = Utils.parseJSONMessage(msg);
-					authentication = false;
-				}
+				// DATA 길이만큼 byte배열 선언
+				byte[] body = new byte[length];
+				int bodylength = inMsg.read(body);
+				String json = new String(body, 4, bodylength - 4);
+				msg = Utils.parseJSONMessage(json);
 
 				// '/' 구분자를 기준으로 메시지를 문자열 배열로 파싱
 				rmsg = msg.split("/");
@@ -204,24 +193,72 @@ class ChatThread extends Thread {
 					this.outMsg.write(bytes);
 				}
 
-				// From클라이언트, pong 받음
-				else if (rmsg[1].equals("pong")) {
-					System.out.println(rmsg[0] + "/pong");
-				}
 				// 그밖의 일반 메시지일 때
 				else {
 					msgSendAll(msg);
 				}
-			} // end of while
-			System.out.println("##" + this.getName() + "stop!!");
-		} catch (IOException e) {
-			chatlist.remove(this);
-			System.out.println("[ChatThread]run() IOException 발생!!");
-		}
-	}
+			} catch (IOException e) {
+				try {
+					System.out.println("Time out 발생...");
+					String msg = "server/ping";
+					byte[] bytes = msg.getBytes();
+					outMsg.write(bytes);
+					System.out.println("ping 전송");
+				} catch (IOException e3) {
+					e3.printStackTrace();
+				}
+				try {
+					Thread.sleep(5000);
+				} catch (InterruptedException e1) {
+					e1.printStackTrace();
+				}
 
-	public static void main(String[] args) {
-		MultiThreadedChatServer server = new MultiThreadedChatServer();
-		server.start();
-	}
+				// 수신된 메시지를 DATASIZE 길이
+				byte[] header = new byte[4];
+				try {
+					int headlength = inMsg.read(header);
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+				int length = Utils.byteToInt(header);
+
+				// DATA 길이만큼 byte배열 선언
+				byte[] body = new byte[length];
+
+				try {
+					int bodylength;
+					bodylength = inMsg.read(body);
+					String json = new String(body, 4, bodylength - 4);
+					msg = Utils.parseJSONMessage(json);
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+
+				// '/' 구분자를 기준으로 메시지를 문자열 배열로 파싱
+				rmsg = msg.split("/");
+
+				// From클라이언트, pong 받음
+				if (rmsg[1].equals("pong")) {
+					System.out.println(Thread.currentThread().getName() + "/pong");
+				} else {
+					status = false;
+					try {
+						clientSocket.close();
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+				}
+			}
+		} // end of while
+		System.out.println("##" + this.getName() + "stop!!");
+	} // catch (IOException e) {
+		// chatlist.remove(this);
+		// System.out.println("[ChatThread]run() IOException 발생!!");
+		// }
+		// }
+
+	/*
+	 * public static void main(String[] args) { MultiThreadedChatServer server =
+	 * new MultiThreadedChatServer(); server.start(); }
+	 */
 }

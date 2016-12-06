@@ -6,26 +6,23 @@ import java.net.Socket;
 import java.util.ArrayList;
 
 import kr.co.daou.db.DBHelper;
+import kr.co.daou.format.Const;
 
 public class MultiThreadedChatServer {
 
 	// 서버 소켓과 클라이언트 연결 소켓
 	private ServerSocket serverSocket = null;
 	private Socket clientSocket = null;
-	private DBHelper helper = null;
 
 	// 연결된 클라이언트 스레드를 관리하는 ArrayList
 	private ArrayList<ChatThread> chatlist = new ArrayList<ChatThread>();
 
-	public MultiThreadedChatServer() {
-		helper = new DBHelper();
-	}
-
 	public void start() {
 		try {
 			// 서버 소켓 생성
-			serverSocket = new ServerSocket(9999);
+			serverSocket = new ServerSocket(Const.PORT_NUM);
 			System.out.println("Server START...");
+
 			while (true) {
 				clientSocket = serverSocket.accept();
 				// 연결된 클라이언트에서 스레드 클래스 생성
