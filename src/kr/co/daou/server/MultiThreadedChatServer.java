@@ -16,6 +16,11 @@ public class MultiThreadedChatServer {
 
 	// 연결된 클라이언트 스레드를 관리하는 ArrayList
 	private ArrayList<ChatThread> chatlist = new ArrayList<ChatThread>();
+	private DBHelper dbHelper = null;
+
+	public MultiThreadedChatServer() {
+		dbHelper = new DBHelper();
+	}
 
 	public void start() {
 		try {

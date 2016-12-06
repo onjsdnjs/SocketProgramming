@@ -257,8 +257,8 @@ class ChatThread extends Thread {
 		// }
 		// }
 
-	/*
-	 * public static void main(String[] args) { MultiThreadedChatServer server =
-	 * new MultiThreadedChatServer(); server.start(); }
-	 */
+	public static void main(String[] args) {
+		MultiThreadedChatServer server = new MultiThreadedChatServer();
+		server.start();
+	}
 }
